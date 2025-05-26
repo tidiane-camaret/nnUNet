@@ -41,6 +41,8 @@ class AddPromptChannelsTransform(AbstractTransform):
         
         # Get the input image and ground truth
         imgs = data_dict['image']
+
+        #print(len(data_dict['segmentation']))
         gts = data_dict['segmentation']
         
         # Debug: print shapes and unique values
@@ -210,6 +212,8 @@ class AddPromptChannelsTransform(AbstractTransform):
         # Concatenate the original image with the prompt channels
         data_dict['image'] = torch.cat([imgs, prompt_channels], dim=0)
         data_dict['segmentation'] = gt_class_torch.unsqueeze(0)  # Add batch dimension
+
+        
         
         if self.verbose:
             print(f"Output data shape: {data_dict['image'].shape}")

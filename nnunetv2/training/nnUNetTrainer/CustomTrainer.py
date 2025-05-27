@@ -4,7 +4,7 @@ from nnunetv2.training.data_augmentation.custom_transforms.multi_channel_transfo
 from typing import Union, Tuple, List
 from batchgeneratorsv2.transforms.utils.deep_supervision_downsampling import DownsampleSegForDSTransform
 from batchgeneratorsv2.transforms.utils.compose import ComposeTransforms
-
+import numpy as np
 from torch import nn
 from nnunetv2.run.load_pretrained_weights import load_pretrained_weights # Import the function
 
@@ -18,14 +18,7 @@ class CustomTrainer(nnUNetTrainer):
         
         # Set number of epochs
         self.num_epochs = 1
-        # self.print_to_log_file might not be available before super().on_train_start() initializes logger
-        # print(f"Setting number of epochs to {self.num_epochs} for {self.__class__.__name__}")
-        """
-        # Update the network configuration to use the new number of input channels
-        if hasattr(self, 'network'):
-            self.network.conv_blocks_context[0].convs[0].conv.in_channels = self.num_input_channels
-            self.network.conv_blocks_context[0].convs[0].all_modules[0].in_channels = self.num_input_channels
-        """
+
 
     def set_initial_checkpoint(self, path: str):
         """Sets the path for the initial checkpoint to be loaded."""
@@ -73,25 +66,31 @@ class CustomTrainer(nnUNetTrainer):
         if self.dataloader_val is None:
             self.print_to_log_file("Validation dataloader (self.dataloader_val) is not initialized. Skipping initial validation.")
         else:
+            self.print_to_log_file("Validation dataloader is initialized, calling on_validation_epoch_start() to prepare for validation.")
             self.on_validation_epoch_start()  # Sets network to eval mode and other necessary preparations
-
+            self.print_to_log_file("on_validation_epoch_start() completed, proceeding with initial validation.")
             val_outputs = []
             # Store original training mode and set to eval
+            self.print_to_log_file("Setting network to eval mode for initial validation.")
             original_training_state = self.network.training
             self.network.eval()
+            self.print_to_log_file("Network set to eval mode, starting initial validation...")
 
             with torch.no_grad():  # Disable gradient calculations during validation
-                for batch_id, batch in enumerate(self.dataloader_val):
-                    # self.print_to_log_file(f"Initial validation: processing batch {batch_id + 1}/{len(self.dataloader_val)}") # Optional: for verbose logging
+                for batch_id in range(self.num_val_iterations_per_epoch):
                     try:
-                        output_val_step = self.validation_step(batch)
-                        val_outputs.append(output_val_step)
+                        val_outputs.append(self.validation_step(next(self.dataloader_val)))
+                        self.print_to_log_file(f"Initial validation: processing batch {batch_id + 1}/") # Optional: for verbose logging
+                        
+ 
                     except Exception as e:
                         self.print_to_log_file(f"Error during initial validation_step for batch {batch_id}: {e}")
-                        # Depending on severity, you might want to break or continue
             
             if val_outputs:
                 self.on_validation_epoch_end(val_outputs)
+                self.print_to_log_file('val_loss', np.round(self.logger.my_fantastic_logging['val_losses'][-1], decimals=4))
+                self.print_to_log_file('Pseudo dice', [np.round(i, decimals=4) for i in
+                                               self.logger.my_fantastic_logging['dice_per_class_or_region'][-1]])
             else:
                 self.print_to_log_file("No batches were processed or no outputs generated during initial validation.")
             
@@ -136,7 +135,6 @@ class CustomTrainer(nnUNetTrainer):
 
 
     def get_validation_transforms(self, deep_supervision_scales, is_cascaded, foreground_labels, regions, ignore_label):
-        # ...existing code...
         default_transforms_obj = super().get_validation_transforms(
             deep_supervision_scales, is_cascaded, foreground_labels, regions, ignore_label
         )
@@ -160,7 +158,6 @@ class CustomTrainer(nnUNetTrainer):
                                    num_input_channels: int,
                                    num_output_channels: int,
                                    enable_deep_supervision: bool = True) -> nn.Module:
-        # ...existing code...
         return nnUNetTrainer.build_network_architecture(
             architecture_class_name,
             arch_init_kwargs,
